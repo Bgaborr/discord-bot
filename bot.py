@@ -131,11 +131,6 @@ async def show_total(ctx):
     current_time = user_data[user_id][current_month]["total_time"] if current_month in user_data[user_id] else 0
     current_hours = current_time // 60
     current_mins = current_time % 60
-
-    message = f"{username}\n" \
-              f"Összes Duty Idő    {total_all_hours}h {total_all_mins}m\n" \
-              f"Jelenlegi Duty Idő {current_hours}h {current_mins}m\n" \
-              f"({datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_)"
     embed = {
         "embeds": [{
             "color": 27946,
@@ -149,9 +144,7 @@ async def show_total(ctx):
         }]
     }
 
-    payload = {"content": message, "username": "Duty Bot"}
     try:
-        response = requests.post(WEBHOOK_URL, json=payload)
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
