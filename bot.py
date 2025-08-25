@@ -2,10 +2,10 @@ import discord
 from discord.ext import commands
 import requests
 import os
-import json
 from datetime import datetime
 import threading
 from flask import Flask
+from pymongo import MongoClient
 
 app = Flask(__name__)
 
@@ -22,39 +22,55 @@ threading.Thread(target=run_web).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_USER_ID = 442375796804550716 
-DATA_FILE = "duty_data.json"
-WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"  # A te webhook URL-d
+WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg" 
+
+# MongoDB kapcsolat
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:Almafa12345@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
+client = MongoClient(MONGO_URI)
+db = client["noose"]  
+collection = db["duty_time"] 
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Adatok betöltése JSON-ból induláskor
-try:
-    with open(DATA_FILE, 'r') as f:
-        user_data = json.load(f)
-except FileNotFoundError:
+def load_user_data():
     user_data = {}
+    for doc in collection.find():
+        user_id = doc["user_id"]
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id][doc["month"]] = {"total_time": doc["total_time"], "log": doc.get("log", [])}
+    return user_data
+
+# Globális user_data inicializálása
+user_data = load_user_data()
+
+def save_data(user_data):
+    collection.delete_many({})  # Törli a régi adatokat
+    for user_id, months in user_data.items():
+        for month, data in months.items():
+            collection.insert_one({
+                "user_id": user_id,
+                "month": month,
+                "total_time": data["total_time"],
+                "log": data["log"]
+            })
 
 def get_current_month():
     return datetime.now().strftime("%Y-%m")
 
-def save_data():
-    with open(DATA_FILE, 'w') as f:
-        json.dump(user_data, f, indent=4)
-
 @bot.event
 async def on_ready():
     print(f"Bejelentkezve: {bot.user}")
-    save_data()  # Mentés induláskor, ha új fájl
 
 @bot.command(name="idoadd")
 async def add_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
     current_month = get_current_month()
     if not ido:
-        await ctx.send("Adj meg egy időt! Példa: `!addido 18:00` vagy `!addido 18 00`")
+        await ctx.send("Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
         return
     try:
         # Split on either ':' or ' '
@@ -76,7 +92,7 @@ async def add_ido(ctx, *, ido: str = None):
         total_hours = user_data[user_id][current_month]["total_time"] // 60
         total_mins = user_data[user_id][current_month]["total_time"] % 60
         await ctx.send(f"Idő hozzáadva: {ido}. Új összes ({current_month}): {total_hours}:{total_mins:02d}")
-        save_data()
+        save_data(user_data)
     except ValueError:
         await ctx.send("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
 
@@ -152,9 +168,9 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
         await ctx.send("Nincs jogosultságod mások logjának megtekintésére!")
         return
     if not discord_name:
-        await ctx.send("Adj meg egy Discord nevet! Példa: `!idolog Felhasználó#1234 [YYYY-MM]`")
+        await ctx.send("Adj meg egy Discord nevet! Példa: `!idolog felhasználónév [YYYY-MM]`")
         return
-    user = discord.utils.get(ctx.guild.members, name=discord_name.split('#')[0], discriminator=discord_name.split('#')[1] if '#' in discord_name else None)
+    user = discord.utils.get(ctx.guild.members, name=discord_name)
     if not user:
         await ctx.send("Nem található ilyen felhasználó.")
         return
@@ -175,7 +191,7 @@ async def delete_ido(ctx, index: int = None):
         return
     if index is None:
         await ctx.send("Adj meg egy sorszámot a logból! Példa: `!torolido 1`")
-        return
+        return  
     if index < 1 or index > len(user_data[user_id][current_month]["log"]):
         await ctx.send("Érvénytelen sorszám. Használd az `!idolog` parancsot a sorszámok megtekintéséhez.")
         return
@@ -185,31 +201,6 @@ async def delete_ido(ctx, index: int = None):
     total_hours = user_data[user_id][current_month]["total_time"] // 60
     total_mins = user_data[user_id][current_month]["total_time"] % 60
     await ctx.send(f"Törölve: {timestamp} - {orig}. Új összes ({current_month}): {total_hours}:{total_mins:02d}")
-    save_data()
-
-@bot.command(name="lezar")
-async def lezar(ctx):
-    user_id = ctx.author.id
-    current_month = get_current_month()
-    if user_id not in user_data or current_month not in user_data[user_id]:
-        await ctx.send(f"Nincs eltárolt időd {current_month} hónapra.")
-    else:
-        user_data[user_id][current_month]["total_time"] = 0
-        user_data[user_id][current_month]["log"] = []
-        await ctx.send(f"Az idő összesítésed és logod törölve ({current_month}).")
-        save_data()
-
-@bot.command(name="hlezar")
-async def havi_lezar(ctx):
-    if ctx.author.id != ALLOWED_USER_ID:
-        await ctx.send("Nincs jogosultságod a havi lezárás végrehajtására!")
-        return
-    current_month = get_current_month()
-    for user_id in user_data:
-        if current_month in user_data[user_id]:
-            user_data[user_id][current_month]["total_time"] = 0
-            user_data[user_id][current_month]["log"] = []
-    await ctx.send(f"{current_month} hónap lezárva, új hónap elkezdve.")
-    save_data()
+    save_data(user_data)
 
 bot.run(TOKEN)
