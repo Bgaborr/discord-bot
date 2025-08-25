@@ -6,6 +6,7 @@ from datetime import datetime
 import threading
 from flask import Flask
 from pymongo import MongoClient
+from pymongo.errors import ConnectionError
 
 app = Flask(__name__)
 
@@ -22,13 +23,19 @@ threading.Thread(target=run_web).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_USER_ID = 442375796804550716 
-WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg" 
+WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"  # A te webhook URL-d
 
 # MongoDB kapcsolat
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:Almafa12345@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
-client = MongoClient(MONGO_URI)
-db = client["noose"]  
-collection = db["duty_time"] 
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:<db_password>@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
+try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30000)  # Növelt időtúllépés
+    client.server_info()  # Teszteli a kapcsolatot
+    print("Sikeres MongoDB kapcsolat!")
+except ConnectionError as e:
+    print(f"MongoDB kapcsolat hiba: {e}")
+    raise
+db = client["duty_data"]
+collection = db["user_data"]
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -37,26 +44,32 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 def load_user_data():
     user_data = {}
-    for doc in collection.find():
-        user_id = doc["user_id"]
-        if user_id not in user_data:
-            user_data[user_id] = {}
-        user_data[user_id][doc["month"]] = {"total_time": doc["total_time"], "log": doc.get("log", [])}
+    try:
+        for doc in collection.find():
+            user_id = doc["user_id"]
+            if user_id not in user_data:
+                user_data[user_id] = {}
+            user_data[user_id][doc["month"]] = {"total_time": doc["total_time"], "log": doc.get("log", [])}
+    except Exception as e:
+        print(f"Hiba az adatok betöltésekor: {e}")
     return user_data
 
 # Globális user_data inicializálása
 user_data = load_user_data()
 
 def save_data(user_data):
-    collection.delete_many({})  # Törli a régi adatokat
-    for user_id, months in user_data.items():
-        for month, data in months.items():
-            collection.insert_one({
-                "user_id": user_id,
-                "month": month,
-                "total_time": data["total_time"],
-                "log": data["log"]
-            })
+    try:
+        collection.delete_many({})
+        for user_id, months in user_data.items():
+            for month, data in months.items():
+                collection.insert_one({
+                    "user_id": user_id,
+                    "month": month,
+                    "total_time": data["total_time"],
+                    "log": data["log"]
+                })
+    except Exception as e:
+        print(f"Hiba az adatok mentésekor: {e}")
 
 def get_current_month():
     return datetime.now().strftime("%Y-%m")
@@ -73,7 +86,6 @@ async def add_ido(ctx, *, ido: str = None):
         await ctx.send("Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
         return
     try:
-        # Split on either ':' or ' '
         if ':' in ido:
             hours, minutes = map(int, ido.split(':'))
         elif ' ' in ido:
@@ -106,50 +118,32 @@ async def show_total(ctx):
         await ctx.send("Nincs eltárolt idő.")
         return
 
-    # Összes idő kiszámítása az összes hónapból
     total_all_time = sum(data["total_time"] for data in user_data[user_id].values() if "total_time" in data)
     total_all_hours = total_all_time // 60
     total_all_mins = total_all_time % 60
 
-    # Jelenlegi hónap ideje
     current_time = user_data[user_id][current_month]["total_time"] if current_month in user_data[user_id] else 0
     current_hours = current_time // 60
     current_mins = current_time % 60
 
-    # Formázott üzenet
     message = f"{username}\n" \
               f"Összes Duty Idő    {total_all_hours}h {total_all_mins}m\n" \
               f"Jelenlegi Duty Idő {current_hours}h {current_mins}m\n" \
               f"({datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_)"
-    # Embed struktúra a Lua kódhoz hasonlóan
     embed = {
         "embeds": [{
-            "color": 27946,  # Zöld szín (megegyezik a képen látható stílussal)
+            "color": 27946,
             "title": f"**{username}**",
             "description": "Duty lekérdezés",
             "fields": [
-                {
-                    "name": "Összes Duty Idő",
-                    "value": f"{total_all_hours}h {total_all_mins}m",
-                    "inline": True
-                },
-                {
-                    "name": "Jelenlegi Duty Idő",
-                    "value": f"{current_hours}h {current_mins}m",
-                    "inline": True
-                }
+                {"name": "Összes Duty Idő", "value": f"{total_all_hours}h {total_all_mins}m", "inline": True},
+                {"name": "Jelenlegi Duty Idő", "value": f"{current_hours}h {current_mins}m", "inline": True}
             ],
-            "footer": {
-                "text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"
-            }
+            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"}
         }]
     }
 
-    # Webhook küldése
-    payload = {
-        "content": message,
-        "username": "Duty Bot"
-    }
+    payload = {"content": message, "username": "Duty Bot"}
     try:
         response = requests.post(WEBHOOK_URL, json=payload)
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
@@ -159,7 +153,6 @@ async def show_total(ctx):
         await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
         return
 
-    # Helyi válasz a felhasználónak
     await ctx.send("Adatok elküldve a webhookra!")
 
 @bot.command(name="idolog")
@@ -195,7 +188,7 @@ async def delete_ido(ctx, index: int = None):
     if index < 1 or index > len(user_data[user_id][current_month]["log"]):
         await ctx.send("Érvénytelen sorszám. Használd az `!idolog` parancsot a sorszámok megtekintéséhez.")
         return
-    index -= 1  # Átalakítás 0-alapú indexre
+    index -= 1
     timestamp, minutes, orig = user_data[user_id][current_month]["log"].pop(index)
     user_data[user_id][current_month]["total_time"] -= minutes
     total_hours = user_data[user_id][current_month]["total_time"] // 60
