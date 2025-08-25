@@ -26,7 +26,7 @@ ALLOWED_USER_ID = 442375796804550716
 WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"  # A te webhook URL-d
 
 # MongoDB kapcsolat
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:<db_password>@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:Almafa1234@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
 try:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30000)  # Növelt időtúllépés
     client.server_info()  # Teszteli a kapcsolatot
