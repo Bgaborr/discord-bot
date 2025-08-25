@@ -12,7 +12,7 @@ WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEM
 
 intents = discord.Intents.default()
 intents.message_content = True
-
+intents.members = True  
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Adatok betöltése JSON-ból induláskor
@@ -32,7 +32,7 @@ def save_data():
 @bot.event
 async def on_ready():
     print(f"Bejelentkezve: {bot.user}")
-    save_data()  # Mentés induláskor, ha új fájl
+    save_data() 
 
 @bot.command(name="addido")
 async def add_ido(ctx, *, ido: str = None):
@@ -80,7 +80,7 @@ async def show_total(ctx):
     # Embed struktúra a Lua kódhoz hasonlóan
     embed = {
         "embeds": [{
-            "color": 27946,  # Zöld szín (megegyezik a képen látható stílussal)
+            "color": 27946,  # Zöld szín a képen látható stílushoz
             "title": f"**{username}**",
             "description": "Duty lekérdezés",
             "fields": [
@@ -95,23 +95,21 @@ async def show_total(ctx):
                     "inline": True
                 }
             ],
-            "author": {
-                "name": "BGabor",
-                "icon_url": "https://i.imgur.com/N4uTFsw.png"
-            },
             "footer": {
-                "text": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_ :)"
+                "text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_ :)"
             }
         }]
     }
 
-    # Webhook küldése
+    # Webhook küldése hibakereséssel
     try:
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
+        print("Webhook válasz:", response.text)  # Hibakeresés a konzolban
         await ctx.send("Adatok elküldve a webhookra!")
     except requests.exceptions.RequestException as e:
-        await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
+        print(f"Webhook hiba: {e}")  # Hibakeresés a konzolban
+        await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t vagy a konzolt.")
 
 @bot.command(name="idolog")
 async def show_log(ctx, discord_name: str = None, month: str = None):
@@ -119,11 +117,11 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
         await ctx.send("Nincs jogosultságod mások logjának megtekintésére!")
         return
     if not discord_name:
-        await ctx.send("Adj meg egy Discord nevet! Példa: `!idolog Felhasználó#1234 [YYYY-MM]`")
+        await ctx.send("Adj meg egy Discord nevet! Példa: `!idolog bgabor_ [YYYY-MM]`")
         return
-    user = discord.utils.get(ctx.guild.members, name=discord_name.split('#')[0], discriminator=discord_name.split('#')[1] if '#' in discord_name else None)
+    user = discord.utils.get(ctx.guild.members, display_name=discord_name)
     if not user:
-        await ctx.send("Nem található ilyen felhasználó.")
+        await ctx.send(f"Nem található ilyen felhasználó: {discord_name}")
         return
     user_id = user.id
     target_month = month if month else get_current_month()
