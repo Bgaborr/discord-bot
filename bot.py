@@ -49,15 +49,22 @@ async def on_ready():
     print(f"Bejelentkezve: {bot.user}")
     save_data()  # Mentés induláskor, ha új fájl
 
-@bot.command(name="addido")
+@bot.command(name="idoadd")
 async def add_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
     current_month = get_current_month()
     if not ido:
-        await ctx.send("Adj meg egy időt! Példa: `!addido 18:00`")
+        await ctx.send("Adj meg egy időt! Példa: `!addido 18:00` vagy `!addido 18 00`")
         return
     try:
-        hours, minutes = map(int, ido.split(':'))
+        # Split on either ':' or ' '
+        if ':' in ido:
+            hours, minutes = map(int, ido.split(':'))
+        elif ' ' in ido:
+            hours, minutes = map(int, ido.split(' '))
+        else:
+            raise ValueError("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+        
         added_minutes = hours * 60 + minutes
         if user_id not in user_data:
             user_data[user_id] = {}
@@ -71,7 +78,7 @@ async def add_ido(ctx, *, ido: str = None):
         await ctx.send(f"Idő hozzáadva: {ido}. Új összes ({current_month}): {total_hours}:{total_mins:02d}")
         save_data()
     except ValueError:
-        await ctx.send("Hibás formátum. Használj HH:MM formátumot.")
+        await ctx.send("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
 
 @bot.command(name="ido")
 async def show_total(ctx):
@@ -116,12 +123,8 @@ async def show_total(ctx):
                     "inline": True
                 }
             ],
-            "author": {
-                "name": "BGabor",
-                "icon_url": "https://i.imgur.com/N4uTFsw.png"
-            },
             "footer": {
-                "text": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_ :)"
+                "text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"
             }
         }]
     }
