@@ -6,7 +6,7 @@ from datetime import datetime
 import threading
 from flask import Flask
 from pymongo import MongoClient
-from pymongo.errors import ConnectionError
+from pymongo.errors import OperationFailure, ServerSelectionTimeoutError, PyMongoError
 
 app = Flask(__name__)
 
@@ -23,16 +23,23 @@ threading.Thread(target=run_web).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_USER_ID = 442375796804550716 
-WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"  # A te webhook URL-d
+WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"
 
 # MongoDB kapcsolat
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:Almafa1234@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
 try:
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30000)  # Növelt időtúllépés
-    client.server_info()  # Teszteli a kapcsolatot
-    print("Sikeres MongoDB kapcsolat!")
-except ConnectionError as e:
-    print(f"MongoDB kapcsolat hiba: {e}")
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30000)
+    # Teszteli a kapcsolatot és a hitelesítést
+    client.admin.command('ping')  # Ping a szerverhez
+    print("Sikeres MongoDB kapcsolat és hitelesítés!")
+except ServerSelectionTimeoutError as sse:
+    print(f"MongoDB kapcsolat időtúllépés hiba: {sse}")
+    raise
+except OperationFailure as oe:
+    print(f"Hitelesítési hiba: {oe}")
+    raise
+except PyMongoError as pe:
+    print(f"Általános MongoDB hiba: {pe}")
     raise
 db = client["duty_data"]
 collection = db["user_data"]
@@ -50,7 +57,7 @@ def load_user_data():
             if user_id not in user_data:
                 user_data[user_id] = {}
             user_data[user_id][doc["month"]] = {"total_time": doc["total_time"], "log": doc.get("log", [])}
-    except Exception as e:
+    except PyMongoError as e:
         print(f"Hiba az adatok betöltésekor: {e}")
     return user_data
 
@@ -68,7 +75,7 @@ def save_data(user_data):
                     "total_time": data["total_time"],
                     "log": data["log"]
                 })
-    except Exception as e:
+    except PyMongoError as e:
         print(f"Hiba az adatok mentésekor: {e}")
 
 def get_current_month():
