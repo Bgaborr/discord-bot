@@ -122,7 +122,6 @@ async def show_total(ctx):
     username = ctx.author.name
     if user_id not in user_data or not any(user_data[user_id].values()):
         await ctx.send(f"{username}\nNincs eltárolt idő.")
-        await ctx.send("Nincs eltárolt idő.")
         return
 
     total_all_time = sum(data["total_time"] for data in user_data[user_id].values() if "total_time" in data)
@@ -155,12 +154,9 @@ async def show_total(ctx):
         response = requests.post(WEBHOOK_URL, json=payload)
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
-        await ctx.send("Adatok elküldve a webhookra!")
     except requests.exceptions.RequestException as e:
         await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
         return
-
-    await ctx.send("Adatok elküldve a webhookra!")
 
 @bot.command(name="idolog")
 async def show_log(ctx, discord_name: str = None, month: str = None):
