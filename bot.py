@@ -6,7 +6,7 @@ from datetime import datetime
 import requests
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-ALLOWED_USER_ID = 123456789012345678  # Cseréld le a megadott felhasználó Discord ID-jére
+ALLOWED_USER_ID = 442375796804550716  # Cseréld le a megadott felhasználó Discord ID-jére
 DATA_FILE = "duty_data.json"
 WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"  # Cseréld ki a saját webhook URL-re
 
@@ -64,7 +64,7 @@ async def show_total(ctx):
     current_month = get_current_month()
     username = ctx.author.name
     if user_id not in user_data or not any(user_data[user_id].values()):
-        await ctx.send(f"{username}\nNincs eltárolt idő.")
+        await ctx.send("Nincs eltárolt idő.")
         return
 
     # Összes idő kiszámítása az összes hónapból
@@ -77,26 +77,41 @@ async def show_total(ctx):
     current_hours = current_time // 60
     current_mins = current_time % 60
 
-    # Formázott üzenet
-    message = f"{username}\n" \
-              f"Összes Duty Idő    {total_all_hours}h {total_all_mins}m\n" \
-              f"Jelenlegi Duty Idő {current_hours}h {current_mins}m\n" \
-              f"({datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_)"
+    # Embed struktúra a Lua kódhoz hasonlóan
+    embed = {
+        "embeds": [{
+            "color": 27946,  # Zöld szín (megegyezik a képen látható stílussal)
+            "title": f"**{username}**",
+            "description": "Duty lekérdezés",
+            "fields": [
+                {
+                    "name": "Összes Duty Idő",
+                    "value": f"{total_all_hours}h {total_all_mins}m",
+                    "inline": True
+                },
+                {
+                    "name": "Jelenlegi Duty Idő",
+                    "value": f"{current_hours}h {current_mins}m",
+                    "inline": True
+                }
+            ],
+            "author": {
+                "name": "BGabor",
+                "icon_url": "https://i.imgur.com/N4uTFsw.png"
+            },
+            "footer": {
+                "text": f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_ :)"
+            }
+        }]
+    }
 
     # Webhook küldése
-    payload = {
-        "content": message,
-        "username": "Duty Bot"
-    }
     try:
-        response = requests.post(WEBHOOK_URL, json=payload)
+        response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
+        await ctx.send("Adatok elküldve a webhookra!")
     except requests.exceptions.RequestException as e:
         await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
-        return
-
-    # Helyi válasz a felhasználónak
-    await ctx.send("Adatok elküldve a webhookra!")
 
 @bot.command(name="idolog")
 async def show_log(ctx, discord_name: str = None, month: str = None):
