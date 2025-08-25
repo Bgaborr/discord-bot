@@ -3,7 +3,21 @@ from discord.ext import commands
 import os
 import json
 from datetime import datetime
-import requests
+import threading
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot fut Renderen!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+# Indítsd külön szálon a webservert
+threading.Thread(target=run_web).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 ALLOWED_USER_ID = 442375796804550716  # A te megadott ID-d
@@ -29,7 +43,7 @@ def save_data():
     with open(DATA_FILE, 'w') as f:
         json.dump(user_data, f, indent=4)
 
-def send_embed(ctx, username, total_all_hours, total_all_mins, current_hours, current_mins):
+async def send_embed(ctx, username, total_all_hours, total_all_mins, current_hours, current_mins):
     embed = {
         "embeds": [{
             "color": 27946,  # Zöld szín a képen látható stílushoz
@@ -56,8 +70,10 @@ def send_embed(ctx, username, total_all_hours, total_all_mins, current_hours, cu
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
         print("Webhook válasz:", response.text)  # Hibakeresés a konzolban
+        await ctx.send("Adatok elküldve a webhookra!")
     except requests.exceptions.RequestException as e:
         print(f"Webhook hiba: {e}")  # Hibakeresés a konzolban
+        await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t vagy a konzolt.")
 
 @bot.event
 async def on_ready():
