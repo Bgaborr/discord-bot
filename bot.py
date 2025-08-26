@@ -90,7 +90,7 @@ def create_embed(username, title, description, color=16711680, fields=None):
             "title": f"**{title}**",
             "description": description,
             "fields": fields or [],
-            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"}
+            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "}
         }]
     }
 
@@ -203,25 +203,58 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
         embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)  # narancs
         send_webhook(embed)
 
-@bot.command(name="torolido")
-async def delete_ido(ctx, index: int = None):
+@bot.command(name="idotorol")
+async def delete_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
+    username = ctx.author.name
     current_month = get_current_month()
+
     if user_id not in user_data or current_month not in user_data[user_id]:
-        await ctx.send(f"Nincs eltárolt időd {current_month} hónapra.")
+        embed = create_embed(username, "Hiba", f"Nincs eltárolt időd {current_month} hónapra.", color=16711680)
+        send_webhook(embed)
         return
-    if index is None:
-        await ctx.send("Adj meg egy sorszámot a logból! Példa: `!torolido 1`")
-        return  
-    if index < 1 or index > len(user_data[user_id][current_month]["log"]):
-        await ctx.send("Érvénytelen sorszám. Használd az `!idolog` parancsot a sorszámok megtekintéséhez.")
+
+    if not ido:
+        embed = create_embed(username, "Hiba", "Adj meg egy időt! Példa: `!torolido 1:30` vagy `!torolido 90`", color=16711680)
+        send_webhook(embed)
         return
-    index -= 1
-    timestamp, minutes, orig = user_data[user_id][current_month]["log"].pop(index)
-    user_data[user_id][current_month]["total_time"] -= minutes
-    total_hours = user_data[user_id][current_month]["total_time"] // 60
-    total_mins = user_data[user_id][current_month]["total_time"] % 60
-    await ctx.send(f"Törölve: {timestamp} - {orig}. Új összes ({current_month}): {total_hours}:{total_mins:02d}")
-    save_data(user_data)
+
+    try:
+        # Idő feldolgozása (HH:MM vagy perc)
+        if ':' in ido:
+            hours, minutes = map(int, ido.split(':'))
+            remove_minutes = hours * 60 + minutes
+        elif ido.isdigit():
+            remove_minutes = int(ido)
+        else:
+            embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
+            send_webhook(embed)
+            return
+
+        # Ha nincs elég idő levonni
+        if user_data[user_id][current_month]["total_time"] < remove_minutes:
+            embed = create_embed(username, "Hiba", f"Nincs ennyi időd, csak {user_data[user_id][current_month]['total_time']//60}h {user_data[user_id][current_month]['total_time']%60}m van rögzítve.", color=16711680)
+            send_webhook(embed)
+            return
+
+        # Idő levonása és logolása
+        user_data[user_id][current_month]["total_time"] -= remove_minutes
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user_data[user_id][current_month]["log"].append((timestamp, -remove_minutes, ido))
+
+        total_hours = user_data[user_id][current_month]["total_time"] // 60
+        total_mins = user_data[user_id][current_month]["total_time"] % 60
+
+        fields = [
+            {"name": "Idő törölve", "value": f"-{ido}", "inline": True},
+            {"name": "Új összes", "value": f"{total_hours}:{total_mins:02d} ({current_month})", "inline": True}
+        ]
+        embed = create_embed(username, "Idő törölve", "Sikeresen levonva az időből!", color=15105570, fields=fields)  # narancs/pirosas
+        send_webhook(embed)
+        save_data(user_data)
+
+    except ValueError:
+        embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
+        send_webhook(embed)
 
 bot.run(TOKEN)
