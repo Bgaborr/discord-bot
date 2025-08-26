@@ -204,7 +204,7 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
         embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)  # narancs
         send_webhook(embed)
 
-@bot.command(name="idotorol")
+@bot.command(name="torolido")
 async def delete_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
     username = ctx.author.name
@@ -257,5 +257,30 @@ async def delete_ido(ctx, *, ido: str = None):
     except ValueError:
         embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
         send_webhook(embed)
+@bot.command(name="help")
+async def show_help(ctx):
+    username = ctx.author.name
 
+    fields = [
+        {"name": "!idoadd <HH:MM / HH MM>", 
+         "value": "Idő hozzáadása a saját duty idődhöz.\nPélda: `!idoadd 1:30` vagy `!idoadd 90`", "inline": False},
+        {"name": "!torolido <HH:MM / percek>", 
+         "value": "Idő levonása a saját duty idődből.\nPélda: `!torolido 0:45` vagy `!torolido 45`", "inline": False},
+        {"name": "!ido", 
+         "value": "Megmutatja az összes eddigi és a hónapban gyűjtött duty időt.", "inline": False},
+        {"name": "!idolog <felhasználónév> [YYYY-MM]", 
+         "value": "Megmutatja egy felhasználó idő logját. Csak engedélyezett felhasználóknak.", "inline": False},
+        {"name": "!help", 
+         "value": "Ez a súgó, ami felsorolja az összes parancsot és használatukat.", "inline": False}
+    ]
+
+    embed = create_embed(
+        username,
+        "Duty Bot Súgó",
+        "Itt találod az összes elérhető parancs magyarázatát:",
+        color=16975,  
+        fields=fields
+    )
+
+    send_webhook(embed)
 bot.run(TOKEN)
