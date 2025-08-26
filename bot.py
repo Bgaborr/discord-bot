@@ -7,7 +7,6 @@ import threading
 from flask import Flask
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, ServerSelectionTimeoutError, PyMongoError
-import time
 
 app = Flask(__name__)
 
@@ -22,8 +21,8 @@ def run_web():
 # Indítsd külön szálon a webservert
 threading.Thread(target=run_web).start()
 
-TOKEN = os.getenv("DISCORD_TOKEN") 
-ALLOWED_USER_IDS = [442375796804550716] 
+TOKEN = os.getenv("DISCORD_TOKEN")
+ALLOWED_USER_IDS = [442375796804550716]
 WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"
 
 # MongoDB kapcsolat
@@ -60,7 +59,11 @@ def load_user_data():
             user_id = doc["user_id"]
             if user_id not in user_data:
                 user_data[user_id] = {}
-            user_data[user_id][doc["month"]] = {"total_time": doc["total_time"], "log": doc.get("log", [])}
+            user_data[user_id][doc["month"]] = {
+                "total_time": int(doc["total_time"]) if doc.get("total_time") else 0,
+                "log": [(entry[0], int(entry[1]) if isinstance(entry[1], (int, str)) else 0, entry[2]) 
+                        for entry in doc.get("log", []) if len(entry) == 3]
+            }
     except PyMongoError as e:
         print(f"Hiba az adatok betöltésekor: {e}")
     return user_data
@@ -154,7 +157,9 @@ async def show_total(ctx):
     username = ctx.author.name
     current_month = get_current_month()
 
-    if user_id not in user_data:
+    if user_id not in user_data or not any(user_data[user_id].values()):
+        embed = create_embed(username, "Hiba", "Nincs eltárolt időd.", color=16711680)
+        send_webhook(embed)
         return
 
     total_all_time = sum(data["total_time"] for data in user_data[user_id].values())
@@ -194,14 +199,20 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
     target_month = month if month else get_current_month()
 
     if user_id not in user_data or target_month not in user_data[user_id] or not user_data[user_id][target_month]["log"]:
-        embed = create_embed(discord_name, "Idő log", f"Nincs log bejegyzés {target_month} hónapra.", color=15158332)  # narancs
+        embed = create_embed(discord_name, "Idő log", f"Nincs log bejegyzés {target_month} hónapra.", color=15158332)
         send_webhook(embed)
-    else:
+        return
+
+    try:
         lista = "\n".join(
-            f"{i+1}. {ts}: {'+' if added > 0 else '-'}{abs(orig)} ({'-' if added < 0 else ''}{abs(added)//60}:{abs(added)%60:02d})"
+            f"{i+1}. {ts}: {'+' if int(added) > 0 else '-'}{abs(int(added))}: {orig}"
             for i, (ts, added, orig) in enumerate(user_data[user_id][target_month]["log"])
         )
-        embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)  # narancs
+        embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)
+        send_webhook(embed)
+    except (ValueError, TypeError) as e:
+        print(f"Hiba a log formázásakor: {e}")
+        embed = create_embed(discord_name, "Hiba", f"Hiba a log megjelenítésében: {e}", color=16711680)
         send_webhook(embed)
 
 @bot.command(name="torolido")
@@ -250,13 +261,14 @@ async def delete_ido(ctx, *, ido: str = None):
             {"name": "Idő törölve", "value": f"-{ido}", "inline": True},
             {"name": "Új összes", "value": f"{total_hours}:{total_mins:02d} ({current_month})", "inline": True}
         ]
-        embed = create_embed(username, "Idő törölve", "Sikeresen levonva az időből!", color=15105570, fields=fields)  # narancs/pirosas
+        embed = create_embed(username, "Idő törölve", "Sikeresen levonva az időből!", color=15105570, fields=fields)
         send_webhook(embed)
         save_data(user_data)
 
     except ValueError:
         embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
         send_webhook(embed)
+
 bot.remove_command("help")
 @bot.command(name="help")
 async def show_help(ctx):
@@ -279,9 +291,9 @@ async def show_help(ctx):
         username,
         "Duty Bot Súgó",
         "Itt találod az összes elérhető parancs magyarázatát:",
-        color=16975,  
+        color=16975,
         fields=fields
     )
-
     send_webhook(embed)
+
 bot.run(TOKEN)
