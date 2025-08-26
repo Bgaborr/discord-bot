@@ -93,13 +93,27 @@ async def add_ido(ctx, *, ido: str = None):
         await ctx.send("Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
         return
     try:
+        embed = {
+            "embeds": [{
+                "color": 16711680,
+                "title": f"**{username}**",
+                "description": "Saját idő hozzáadása",
+                "fields": [
+                    {"name":"Hibás formátum. Használj HH:MM vagy HH MM formátumot."},
+                ],
+                "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
+            }]
+        }
         if ':' in ido:
             hours, minutes = map(int, ido.split(':'))
         elif ' ' in ido:
             hours, minutes = map(int, ido.split(' '))
         else:
-            raise ValueError("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
-        
+            try:
+                response=requests.post(WEBHOOK_URL,json=embed,headers={'Content-Type': 'application/json'})
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
         added_minutes = hours * 60 + minutes
         if user_id not in user_data:
             user_data[user_id] = {}
@@ -113,7 +127,14 @@ async def add_ido(ctx, *, ido: str = None):
         await ctx.send(f"Idő hozzáadva: {ido}. Új összes ({current_month}): {total_hours}:{total_mins:02d}")
         save_data(user_data)
     except ValueError:
-        await ctx.send("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+        #await ctx.send("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+        try:
+            response=requests.post(WEBHOOK_URL,json=embed,headers={'Content-Type': 'application/json'})
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
+        return
+
 
 @bot.command(name="ido")
 async def show_total(ctx):
@@ -140,7 +161,7 @@ async def show_total(ctx):
                 {"name": "Összes Duty Idő", "value": f"{total_all_hours}h {total_all_mins}m", "inline": True},
                 {"name": "Jelenlegi Duty Idő", "value": f"{current_hours}h {current_mins}m", "inline": True}
             ],
-            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"}
+            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
         }]
     }
 
