@@ -88,6 +88,7 @@ async def on_ready():
 @bot.command(name="idoadd")
 async def add_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
+    username = ctx.author.name
     current_month = get_current_month()
     if not ido:
         await ctx.send("Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
