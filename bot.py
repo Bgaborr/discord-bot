@@ -48,6 +48,10 @@ intents.message_content = True
 intents.members = True  
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+@bot.event
+async def on_ready():
+    print(f"Bejelentkezve: {bot.user}")
+
 def load_user_data():
     user_data = {}
     try:
@@ -79,7 +83,17 @@ def save_data(user_data):
 def get_current_month():
     return datetime.now().strftime("%Y-%m")
 
-# Segédfüggvény webhook küldéshez
+def create_embed(username, title, description, color=16711680, fields=None):
+    return {
+        "embeds": [{
+            "color": color,
+            "title": f"**{title}**",
+            "description": description,
+            "fields": fields or [],
+            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"}
+        }]
+    }
+
 def send_webhook(embed):
     try:
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
@@ -87,132 +101,107 @@ def send_webhook(embed):
     except requests.exceptions.RequestException as e:
         print(f"Webhook hiba: {e}")
 
-# Sablon embed generálása
-def create_embed(username, title, description, fields=None):
-    base_embed = {
-        "embeds": [{
-            "color": 16711680,  # Piros szín
-            "title": f"**{username}**",
-            "description": description,
-            "fields": fields or [],
-            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
-        }]
-    }
-    return base_embed
-
-# Speciális embed-ek
-def get_success_embed(username, ido, total_hours, total_mins, current_month):
-    fields = [
-        {"name": "Idő hozzáadva", "value": f"{ido}", "inline": True},
-        {"name": "Új összes", "value": f"{total_hours}:{total_mins:02d} ({current_month})", "inline": True}
-    ]
-    return create_embed(username, "Saját idő hozzáadása", "Sikeresen hozzáadva", fields)
-
-def get_error_embed(username, error_message):
-    fields = [{"name": "Hiba", "value": error_message, "inline": False}]
-    return create_embed(username, "Saját idő hozzáadása", "Hiba történt", fields)
-
-@bot.event
-async def on_ready():
-    print(f"Bejelentkezve: {bot.user}")
-
 @bot.command(name="idoadd")
 async def add_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
     username = ctx.author.name
     current_month = get_current_month()
+
     if not ido:
-        embed = get_error_embed(username, "Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
+        embed = create_embed(username, "Hiba", "Adj meg egy időt! Példa: `!idoadd 18:00`", color=16711680)
         send_webhook(embed)
         return
+
     try:
         if ':' in ido:
             hours, minutes = map(int, ido.split(':'))
         elif ' ' in ido:
             hours, minutes = map(int, ido.split(' '))
         else:
-            embed = get_error_embed(username, "Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+            embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy HH MM formátumot.", color=16711680)
             send_webhook(embed)
             return
-        
+
         added_minutes = hours * 60 + minutes
         if user_id not in user_data:
             user_data[user_id] = {}
         if current_month not in user_data[user_id]:
             user_data[user_id][current_month] = {"total_time": 0, "log": []}
+
         user_data[user_id][current_month]["total_time"] += added_minutes
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         user_data[user_id][current_month]["log"].append((timestamp, added_minutes, ido))
+
         total_hours = user_data[user_id][current_month]["total_time"] // 60
         total_mins = user_data[user_id][current_month]["total_time"] % 60
-        embed = get_success_embed(username, ido, total_hours, total_mins, current_month)
+
+        fields = [
+            {"name": "Idő hozzáadva", "value": ido, "inline": True},
+            {"name": "Új összes", "value": f"{total_hours}:{total_mins:02d} ({current_month})", "inline": True}
+        ]
+        embed = create_embed(username, "Idő hozzáadva", "Sikeres mentés!", color=3066993, fields=fields)  # zöld
         send_webhook(embed)
         save_data(user_data)
+
     except ValueError:
-        embed = get_error_embed(username, "Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+        embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy HH MM formátumot.", color=16711680)
         send_webhook(embed)
-        return
 
 @bot.command(name="ido")
 async def show_total(ctx):
     user_id = ctx.author.id
-    current_month = get_current_month()
     username = ctx.author.name
-    if user_id not in user_data or not any(user_data[user_id].values()):
+    current_month = get_current_month()
+
+    if user_id not in user_data:
         return
 
-    total_all_time = sum(data["total_time"] for data in user_data[user_id].values() if "total_time" in data)
+    total_all_time = sum(data["total_time"] for data in user_data[user_id].values())
     total_all_hours = total_all_time // 60
     total_all_mins = total_all_time % 60
 
-    current_time = user_data[user_id][current_month]["total_time"] if current_month in user_data[user_id] else 0
+    current_time = user_data[user_id].get(current_month, {}).get("total_time", 0)
     current_hours = current_time // 60
     current_mins = current_time % 60
 
-    message = f"{username}\n" \
-              f"Összes Duty Idő    {total_all_hours}h {total_all_mins}m\n" \
-              f"Jelenlegi Duty Idő {current_hours}h {current_mins}m\n" \
-              f"({datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_)"
-    embed = {
-        "embeds": [{
-            "color": 27946,
-            "title": f"**{username}**",
-            "description": "Duty lekérdezés",
-            "fields": [
-                {"name": "Összes Duty Idő", "value": f"{total_all_hours}h {total_all_mins}m", "inline": True},
-                {"name": "Jelenlegi Duty Idő", "value": f"{current_hours}h {current_mins}m", "inline": True}
-            ],
-            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"}
-        }]
-    }
-
-    payload = {"content": message, "username": "Duty Bot"}
-    try:
-        response = requests.post(WEBHOOK_URL, json=payload)
-        response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
-        response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"Webhook hiba: {e}")
+    fields = [
+        {"name": "Összes Duty Idő", "value": f"{total_all_hours}h {total_all_mins}m", "inline": True},
+        {"name": "Jelenlegi Duty Idő", "value": f"{current_hours}h {current_mins}m", "inline": True}
+    ]
+    embed = create_embed(username, "Duty idő", "Duty lekérdezés", color=3447003, fields=fields)  # kék
+    send_webhook(embed)
 
 @bot.command(name="idolog")
 async def show_log(ctx, discord_name: str = None, month: str = None):
     if ctx.author.id != ALLOWED_USER_ID:
-        await ctx.send("Nincs jogosultságod mások logjának megtekintésére!")
+        embed = create_embed(ctx.author.name, "Hiba", "Nincs jogosultságod más logját megnézni!", color=16711680)
+        send_webhook(embed)
         return
+
     if not discord_name:
-        await ctx.send("Adj meg egy Discord nevet! Példa: `!idolog felhasználónév [YYYY-MM]`")
+        embed = create_embed(ctx.author.name, "Hiba", "Adj meg egy nevet! Példa: `!idolog felhasználónév [YYYY-MM]`", color=16711680)
+        send_webhook(embed)
         return
+
     user = discord.utils.get(ctx.guild.members, name=discord_name)
     if not user:
-        await ctx.send("Nem található ilyen felhasználó.")
+        embed = create_embed(ctx.author.name, "Hiba", "Nem található ilyen felhasználó.", color=16711680)
+        send_webhook(embed)
         return
+
     user_id = user.id
     target_month = month if month else get_current_month()
+
     if user_id not in user_data or target_month not in user_data[user_id] or not user_data[user_id][target_month]["log"]:
-        await ctx.send(f"Nincs log bejegyzés {discord_name} számára {target_month} hónapra.")
+        embed = create_embed(discord_name, "Idő log", f"Nincs log bejegyzés {target_month} hónapra.", color=15158332)  # narancs
+        send_webhook(embed)
     else:
-        lista = "\n".join(f"{i+1}. {ts}: +{orig} ({added // 60}:{added % 60:02d})" for i, (ts, added, orig) in enumerate(user_data[user_id][target_month]["log"]))
-        await ctx.send(f"{discord_name} idő logja ({target_month}):\n{lista}")
+        lista = "\n".join(
+            f"{i+1}. {ts}: +{orig} ({added // 60}:{added % 60:02d})"
+            for i, (ts, added, orig) in enumerate(user_data[user_id][target_month]["log"])
+        )
+        embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)  # narancs
+        send_webhook(embed)
 
 @bot.command(name="torolido")
 async def delete_ido(ctx, index: int = None):
