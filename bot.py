@@ -7,6 +7,7 @@ import threading
 from flask import Flask
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, ServerSelectionTimeoutError, PyMongoError
+import asyncio
 
 app = Flask(__name__)
 
@@ -257,4 +258,9 @@ async def delete_ido(ctx, *, ido: str = None):
         embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
         send_webhook(embed)
 
-bot.run(TOKEN)
+try:
+    bot.run(TOKEN)
+except discord.HTTPException as e:
+    if e.status == 429:
+        print("Rate limited. Waiting...")
+        asyncio.sleep(60) 
