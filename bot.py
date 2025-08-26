@@ -205,7 +205,7 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
 
     try:
         lista = "\n".join(
-            f"{i+1}. {ts}: {'+' if int(added) > 0 else '-'}{abs(int(added))}: {orig}"
+            f"{i+1}. {ts}: {'+' if int(added) > 0 else '-'}{abs(int(added))} 'perc ' :  {orig}"
             for i, (ts, added, orig) in enumerate(user_data[user_id][target_month]["log"])
         )
         embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)
@@ -215,7 +215,7 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
         embed = create_embed(discord_name, "Hiba", f"Hiba a log megjelenítésében: {e}", color=16711680)
         send_webhook(embed)
 
-@bot.command(name="torolido")
+@bot.command(name="idotorol")
 async def delete_ido(ctx, *, ido: str = None):
     user_id = ctx.author.id
     username = ctx.author.name
