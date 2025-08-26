@@ -21,8 +21,8 @@ def run_web():
 # Indítsd külön szálon a webservert
 threading.Thread(target=run_web).start()
 
-TOKEN = os.getenv("DISCORD_TOKEN")
-ALLOWED_USER_ID = 442375796804550716 
+TOKEN = os.getenv("DISCORD_TOKEN") 
+ALLOWED_USER_IDS = [442375796804550716] 
 WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEMJJlkb_dNePfTxXIM1tSOd7B4hGow8YbLbVYUtqd_fgc_0h57OnToc_bg"
 
 # MongoDB kapcsolat
@@ -83,11 +83,12 @@ def save_data(user_data):
 def get_current_month():
     return datetime.now().strftime("%Y-%m")
 
-def create_embed(username, title, description, color=16711680, fields=None):
+def create_embed( title, description, color=16711680, fields=None,username=None):
     return {
         "embeds": [{
             "color": color,
             "title": f"**{title}**",
+            'username':f"{username}",
             "description": description,
             "fields": fields or [],
             "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "}
@@ -197,7 +198,7 @@ async def show_log(ctx, discord_name: str = None, month: str = None):
         send_webhook(embed)
     else:
         lista = "\n".join(
-            f"{i+1}. {ts}: +{orig} ({added // 60}:{added % 60:02d})"
+            f"{i+1}. {ts}: {'+' if added > 0 else '-'}{abs(orig)} ({'-' if added < 0 else ''}{abs(added)//60}:{abs(added)%60:02d})"
             for i, (ts, added, orig) in enumerate(user_data[user_id][target_month]["log"])
         )
         embed = create_embed(discord_name, "Idő log", f"{discord_name} idő logja ({target_month}):\n{lista}", color=15158332)  # narancs
