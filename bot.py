@@ -257,6 +257,7 @@ async def delete_ido(ctx, *, ido: str = None):
     except ValueError:
         embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
         send_webhook(embed)
+bot.remove_command("help")
 @bot.command(name="help")
 async def show_help(ctx):
     username = ctx.author.name
