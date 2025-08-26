@@ -7,7 +7,7 @@ import threading
 from flask import Flask
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, ServerSelectionTimeoutError, PyMongoError
-import asyncio
+import time
 
 app = Flask(__name__)
 
@@ -263,4 +263,4 @@ try:
 except discord.HTTPException as e:
     if e.status == 429:
         print("Rate limited. Waiting...")
-        asyncio.sleep(60) 
+        time.sleep(60)
