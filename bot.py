@@ -174,7 +174,7 @@ async def show_total(ctx):
 
 @bot.command(name="idolog")
 async def show_log(ctx, discord_name: str = None, month: str = None):
-    if ctx.author.id != ALLOWED_USER_ID:
+    if ctx.author.id not in ALLOWED_USER_IDS:
         embed = create_embed(ctx.author.name, "Hiba", "Nincs jogosultságod más logját megnézni!", color=16711680)
         send_webhook(embed)
         return
@@ -258,9 +258,4 @@ async def delete_ido(ctx, *, ido: str = None):
         embed = create_embed(username, "Hiba", "Hibás formátum. Használj HH:MM vagy csak perceket!", color=16711680)
         send_webhook(embed)
 
-try:
-    bot.run(TOKEN)
-except discord.HTTPException as e:
-    if e.status == 429:
-        print("Rate limited. Waiting...")
-        time.sleep(60)
+bot.run(TOKEN)
