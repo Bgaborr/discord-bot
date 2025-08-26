@@ -29,7 +29,6 @@ WEBHOOK_URL = "https://discord.com/api/webhooks/1409565434826592306/I9UfoJh-4EEM
 MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://gabe:Almafa1234@bot.ngypdsp.mongodb.net/?retryWrites=true&w=majority&appName=Bot")
 try:
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30000)
-    # Teszteli a kapcsolatot és a hitelesítést
     client.admin.command('ping')  # Ping a szerverhez
     print("Sikeres MongoDB kapcsolat és hitelesítés!")
 except ServerSelectionTimeoutError as sse:
@@ -61,7 +60,6 @@ def load_user_data():
         print(f"Hiba az adatok betöltésekor: {e}")
     return user_data
 
-# Globális user_data inicializálása
 user_data = load_user_data()
 
 def save_data(user_data):
@@ -81,6 +79,39 @@ def save_data(user_data):
 def get_current_month():
     return datetime.now().strftime("%Y-%m")
 
+# Segédfüggvény webhook küldéshez
+def send_webhook(embed):
+    try:
+        response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Webhook hiba: {e}")
+
+# Sablon embed generálása
+def create_embed(username, title, description, fields=None):
+    base_embed = {
+        "embeds": [{
+            "color": 16711680,  # Piros szín
+            "title": f"**{username}**",
+            "description": description,
+            "fields": fields or [],
+            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
+        }]
+    }
+    return base_embed
+
+# Speciális embed-ek
+def get_success_embed(username, ido, total_hours, total_mins, current_month):
+    fields = [
+        {"name": "Idő hozzáadva", "value": f"{ido}", "inline": True},
+        {"name": "Új összes", "value": f"{total_hours}:{total_mins:02d} ({current_month})", "inline": True}
+    ]
+    return create_embed(username, "Saját idő hozzáadása", "Sikeresen hozzáadva", fields)
+
+def get_error_embed(username, error_message):
+    fields = [{"name": "Hiba", "value": error_message, "inline": False}]
+    return create_embed(username, "Saját idő hozzáadása", "Hiba történt", fields)
+
 @bot.event
 async def on_ready():
     print(f"Bejelentkezve: {bot.user}")
@@ -91,30 +122,19 @@ async def add_ido(ctx, *, ido: str = None):
     username = ctx.author.name
     current_month = get_current_month()
     if not ido:
-        await ctx.send("Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
+        embed = get_error_embed(username, "Adj meg egy időt! Példa: `!addido 18:00 (HH MM)` vagy `!addido 18 00(HH MM)`")
+        send_webhook(embed)
         return
     try:
-        embed = {
-            "embeds": [{
-                "color": 16711680,
-                "title": f"**{username}**",
-                "description": "Saját idő hozzáadása",
-                "fields": [
-                    {"name":"Hibás formátum. Használj HH:MM vagy HH MM formátumot."},
-                ],
-                "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
-            }]
-        }
         if ':' in ido:
             hours, minutes = map(int, ido.split(':'))
         elif ' ' in ido:
             hours, minutes = map(int, ido.split(' '))
         else:
-            try:
-                response=requests.post(WEBHOOK_URL,json=embed,headers={'Content-Type': 'application/json'})
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
+            embed = get_error_embed(username, "Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+            send_webhook(embed)
+            return
+        
         added_minutes = hours * 60 + minutes
         if user_id not in user_data:
             user_data[user_id] = {}
@@ -125,17 +145,13 @@ async def add_ido(ctx, *, ido: str = None):
         user_data[user_id][current_month]["log"].append((timestamp, added_minutes, ido))
         total_hours = user_data[user_id][current_month]["total_time"] // 60
         total_mins = user_data[user_id][current_month]["total_time"] % 60
-        await ctx.send(f"Idő hozzáadva: {ido}. Új összes ({current_month}): {total_hours}:{total_mins:02d}")
+        embed = get_success_embed(username, ido, total_hours, total_mins, current_month)
+        send_webhook(embed)
         save_data(user_data)
     except ValueError:
-        #await ctx.send("Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
-        try:
-            response=requests.post(WEBHOOK_URL,json=embed,headers={'Content-Type': 'application/json'})
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
+        embed = get_error_embed(username, "Hibás formátum. Használj HH:MM vagy HH MM formátumot.")
+        send_webhook(embed)
         return
-
 
 @bot.command(name="ido")
 async def show_total(ctx):
@@ -143,7 +159,6 @@ async def show_total(ctx):
     current_month = get_current_month()
     username = ctx.author.name
     if user_id not in user_data or not any(user_data[user_id].values()):
-        await ctx.send(f"{username}\nNincs eltárolt idő.")
         return
 
     total_all_time = sum(data["total_time"] for data in user_data[user_id].values() if "total_time" in data)
@@ -153,6 +168,11 @@ async def show_total(ctx):
     current_time = user_data[user_id][current_month]["total_time"] if current_month in user_data[user_id] else 0
     current_hours = current_time // 60
     current_mins = current_time % 60
+
+    message = f"{username}\n" \
+              f"Összes Duty Idő    {total_all_hours}h {total_all_mins}m\n" \
+              f"Jelenlegi Duty Idő {current_hours}h {current_mins}m\n" \
+              f"({datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username} _aduty_)"
     embed = {
         "embeds": [{
             "color": 27946,
@@ -162,16 +182,17 @@ async def show_total(ctx):
                 {"name": "Összes Duty Idő", "value": f"{total_all_hours}h {total_all_mins}m", "inline": True},
                 {"name": "Jelenlegi Duty Idő", "value": f"{current_hours}h {current_mins}m", "inline": True}
             ],
-            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"}
+            "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | {username}"}
         }]
     }
 
+    payload = {"content": message, "username": "Duty Bot"}
     try:
+        response = requests.post(WEBHOOK_URL, json=payload)
         response = requests.post(WEBHOOK_URL, json=embed, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        await ctx.send("Hiba a webhook küldése közben. Ellenőrizd az URL-t.")
-        return
+        print(f"Webhook hiba: {e}")
 
 @bot.command(name="idolog")
 async def show_log(ctx, discord_name: str = None, month: str = None):
