@@ -83,13 +83,12 @@ def save_data(user_data):
 def get_current_month():
     return datetime.now().strftime("%Y-%m")
 
-def create_embed( title, description, color=16711680, fields=None,username=None):
+def create_embed(username, title, description, color=16711680, fields=None):
     return {
         "embeds": [{
             "color": color,
             "title": f"**{title}**",
-            'username':f"{username}",
-            "description": description,
+            "description": f"{description}\n\n**Felhasználó:** {username}",
             "fields": fields or [],
             "footer": {"text": f"Bgabor || {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "}
         }]
